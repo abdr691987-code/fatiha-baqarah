@@ -29,6 +29,50 @@
     return node;
   }
 
+  // The name of Allah is coloured as whole words; the letters of the text are never changed.
+  const chars = (...codes) => String.fromCharCode(...codes);
+  // Optional prefixes (a, wa, fa, bi, ta), then the name with or without its alif, then an optional meem.
+  const JALALA = new RegExp('^[' + chars(0x623, 0x648, 0x641, 0x628, 0x62A) + ']{0,2}' + chars(0x627) + '?' +
+    chars(0x644, 0x644, 0x647) + chars(0x645) + '?$');
+
+  function skeleton(word) {
+    let out = '';
+    for (const ch of word) {
+      const c = ch.charCodeAt(0);
+      if (c === 0x671) out += chars(0x627);
+      else if ((c >= 0x621 && c <= 0x63A) || (c >= 0x641 && c <= 0x64A)) out += ch;
+    }
+    return out;
+  }
+
+  function fillQuranText(parent, text) {
+    let plain = '';
+    text.split(/(\s+)/).forEach((part) => {
+      if (part && !/^\s+$/.test(part) && JALALA.test(skeleton(part))) {
+        if (plain) parent.appendChild(document.createTextNode(plain));
+        plain = '';
+        parent.appendChild(el('span', 'jalala', part));
+      } else {
+        plain += part;
+      }
+    });
+    if (plain) parent.appendChild(document.createTextNode(plain));
+  }
+
+  function markerLabel(data, marker, chunkFrom) {
+    const t = data.booklet.markers;
+    const hizb = Math.ceil(marker.q / 4);
+    const part = (marker.q - 1) % 4;
+    let text;
+    if (part === 0) {
+      text = (hizb % 2 === 1 ? t.juz + ' ' + digits(Math.ceil(marker.q / 8)) + ' · ' : '') + t.hizb + ' ' + digits(hizb);
+    } else {
+      text = t.quarters[part] + ' ' + digits(hizb);
+    }
+    if (marker.a !== chunkFrom) text += ' (' + t.atAyah + ' ' + digits(marker.a) + ')';
+    return chars(0x6DE) + ' ' + text;
+  }
+
   function button(className, text) {
     const node = el('button', className, text);
     node.setAttribute('type', 'button');
@@ -126,6 +170,13 @@
     node.setAttribute('data-to', String(chunk.to));
     node.setAttribute('data-tone', index % 2 === 0 ? 'a' : 'b');
 
+    data.markers.markers.forEach((marker) => {
+      if (marker.s !== surah.number || marker.a < chunk.from || marker.a > chunk.to) return;
+      const line = el('div', 'marker', markerLabel(data, marker, chunk.from));
+      line.setAttribute('data-q', String(marker.q));
+      node.appendChild(line);
+    });
+
     const head = el('div', 'chunk-head');
     head.appendChild(starIcon(index + 1));
     head.appendChild(button('play-chunk', t.playChunk));
@@ -139,7 +190,7 @@
       span.setAttribute('class', 'ayah');
       span.setAttribute('data-s', String(surah.number));
       span.setAttribute('data-a', String(ayah.n));
-      span.textContent = ayah.text;
+      fillQuranText(span, ayah.text);
       text.appendChild(span);
       text.appendChild(document.createTextNode(' '));
       text.appendChild(el('span', 'ayah-no', digits(ayah.n)));
@@ -147,6 +198,7 @@
     });
     node.appendChild(text);
     node.appendChild(el('div', 'keyword', chunk.keyword));
+    if (chunk.meaning) node.appendChild(el('div', 'meaning', chunk.meaning));
     return node;
   }
 
@@ -184,7 +236,7 @@
       const basmalah = document.createElement('div');
       basmalah.setAttribute('class', 'basmalah');
       basmalah.setAttribute('data-s', String(number));
-      basmalah.textContent = data.quran.basmalah;
+      fillQuranText(basmalah, data.quran.basmalah);
       node.appendChild(basmalah);
     }
 
